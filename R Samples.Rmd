@@ -1,0 +1,239 @@
+---
+title: "Value-ignorance Effect on Risky Decision upon Gains and Losses"
+output: html_document
+---
+
+1. Load Packages & Data
+```{r}
+library(rms)
+library(doBy)
+library(plyr)
+library(pracma)
+library(ggplot2)
+library(reshape2)
+library(ggthemes)
+library(huxtable)
+library(EstimationTools)
+
+# import the data 
+gain_data <- read.csv("rep_data.csv")
+loss_data <- read.csv("ext_data.csv")
+
+```
+
+2. Combine Data
+```{r}
+# encode gain as 1 and loss as 0
+gain_data$domain <- 1
+loss_data$domain <- 0
+exp_data <- rbind(gain_data, loss_data)
+exp_data <- exp_data[order(exp_data$ResponseID, exp_data$number),]
+rownames(exp_data) <- 1:nrow(exp_data)
+exp_data$riskyChoice <- sapply(exp_data$riskyChoice, as.integer)
+exp_data$riskyChoice <- exp_data$riskyChoice - 1
+```
+
+3. Observation Summary
+```{r}
+table(exp_data$condition, exp_data$domain)/5
+```
+
+4. Chocie Proportion Figure
+```{r}
+n_std <- length(unique(exp_data[exp_data$condition=="standard",]$ResponseID))
+n_vi <- length(unique(exp_data[exp_data$condition=="value ignorance",]$ResponseID))
+
+# 1) calculate the proportion of risky choices for each person by ID and std/vi condition
+fig_data <- summaryBy(riskyChoice~ResponseID+condition, data=exp_data, FUN=mean)
+
+# 2) we need the mean and sd of the above proportions(by conditions)
+fig_stat <- summaryBy(riskyChoice.mean~condition, data=fig_data, FUN=c(mean, sd))
+
+# 3) construct the central 95% of the distributions of the risky choice proportions in both conditions
+fig_stat$n <- c(n_std, n_vi)
+fig_stat <- rename(fig_stat, c("riskyChoice.mean.mean" = "mu",
+"riskyChoice.mean.sd" = "sd"))
+fig_stat$error95 <- qnorm(0.975) * fig_stat$sd / sqrt(fig_stat$n)
+fig_stat$left95 <- fig_stat$mu - fig_stat$error95
+fig_stat$right95 <- fig_stat$mu + fig_stat$error95
+
+# 4) generate the graph
+fig <- ggplot() +
+geom_point(data=fig_stat, aes(x=condition, y=mu), size=2.5) +
+geom_errorbar(data=fig_stat, aes(x=condition, ymin=left95, ymax=right95),
+width=0.05, size=0.5) +
+labs(x = "", y = "Proportion of Risky Choices") +
+geom_rangeframe() +
+theme_economist_white(gray_bg = FALSE)
+fig
+```
+
+5. Significance Test
+```{r}
+t_data <- summaryBy(riskyChoice~ResponseID+condition+domain, data=exp_data, FUN=mean)
+
+# 1) gain domain
+g_std <- std[which(std$domain==1),]
+g_vi <- vi[which(vi$domain==1),]
+t.test(g_std$riskyChoice.mean, g_vi$riskyChoice.mean)
+
+# 2) loss domain
+l_std <- std[which(std$domain==0),]
+l_vi <- vi[which(vi$domain==0),]
+t.test(l_std$riskyChoice.mean, l_vi$riskyChoice.mean)
+
+```
+
+6. Logistic Regression 
+```{r}
+# 0a) encode standard condition = 0 and value ignorance = 1
+exp_data$cond <- sapply(exp_data$condition, as.integer)
+exp_data$cond <- exp_data$cond - 1
+# 0b) generate the variable "previous" indicating whether or not earning rewards (or no loss) in the previous exp_data$previous <- seq.int(nrow(exp_data))
+earned <- function(x) {
+if (rem(x, 5) == 1) {
+previous = 0
+}else {
+previous = exp_data[x-1, "result"]
+}
+return(previous)
+}
+exp_data$previous <- sapply(exp_data$previous, earned)
+
+# 1a)
+treat <- lrm(riskyChoice~cond + domain, x=T, y=T, data = exp_data)
+print('THE REGRESSION ON TWO TREATMENTS')
+
+
+# 1b)
+treat_c <- robcov(treat, cluster=exp_data$ResponseID)
+print('THE REGRESSION ON TWO TREATMENTS W/ CLUSTERED STD.ERRS')
+
+# 2a)
+treat_order <- lrm(riskyChoice~cond + domain + order, x=T, y=T, data = exp_data)
+print('THE REGRESSION ON TWO TREATMENTS AND ORDER')
+
+# 2b)
+treat_order_c <- robcov(treat_order, cluster=exp_data$ResponseID)
+print('THE REGRESSION ON TWO TREATMENTS AND ORDER W/ CLUSTERED STD.ERRS')
+
+# 3a)
+treat_order_prev <- lrm(riskyChoice~cond + domain + order + previous, x=T, y=T, data = exp_data)
+print('THE REGRESSION ON TWO TREATMENTS, ORDER, AND PREVIOUS QUESTION RESULT')
+
+# 3b)
+treat_order_prev_c <- robcov(treat_order_prev, cluster=exp_data$ResponseID)
+print('THE REGRESSION ON TWO TREATMENTS, ORDER, AND PREVIOUS QUESTION RESULT W/ CLUSTERED STD.ERRS')
+
+```
+
+7. Model-based analysis of risk preference (MLE)
+```{r}
+# 1) split the data
+gain <- subset(exp_data, exp_data$domain == 1)
+loss <- subset(exp_data, exp_data$domain == 0)
+
+# 2) gain density function 
+gain_ChooseLeft_dens <- function(theta, y, X){
+# calculate single utilities (for gain domain)
+u_l <- X[,1]^theta[1]
+u_r <- X[,2]^theta[1]
+# calculate prob weightings
+wp_l <- exp(-(-(log(X[,3])))^theta[2] )
+wp_r <- exp(-(-(log(X[,4])))^theta[2] )
+# calculatate the difference between utilities
+D_Prospect <- u_l * wp_l - u_r * wp_r
+# calculate the probability of choosing left(then the probability of choosing right is 1-pl)
+pl <- 1/(1+exp(-theta[3] * (theta[4] + D_Prospect)))
+# generate maximum likelihood function
+density <- y * pl + (1-y) * (1-pl)
+logdensity <- log(prod(density))
+return(logdensity)
+}
+
+# 3) loss density function
+{
+# calculate single utilities (for loss domain, other parts are exactly the same)
+u_l <- -theta[5] * (-X[,1])^theta[1]
+u_r <- -theta[5] * (-X[,2])^theta[1]
+# calculate prob weightings
+wp_l <- exp(-(-(log(X[,3])))^theta[2])
+wp_r <- exp(-(-(log(X[,4])))^theta[2])
+# calculatate the difference between utilities
+D_Prospect <- u_l * wp_l - u_r * wp_r
+# calculate the probability of choosing left(then the probability of choosing right is 1-pl)
+pl <- 1/(1+exp(-theta[3] * (theta[4] + D_Prospect)))
+# generate maximum likelihood function
+density <- y * pl + (1-y) * (1-pl)
+logdensity <- log(prod(density))
+return(logdensity)
+}
+# 4) another function preprocessing data in matrix form for estimation
+transform <- function(data, domain) {
+if (domain == 1) {
+lv <- data$valLeft
+rv <- data$valRight
+pl <- data$probLeft
+pr <- data$probRight
+}else {
+lv <- -data$valLeft
+rv <- -data$valRight
+pl <- data$probLeft
+pr <- data$probRight
+}X
+<- matrix(c(lv, rv, pl, pr), ncol=4)
+return(X)
+}
+
+```
+
+7.1 Gain Domain
+```{r}
+# 1a) gain fit pooling std/vi conditions
+g_y <- gain$riskyChoice
+g_X <- transform(gain, 1)
+gain_fit <- optim(c(1,1,1,1), gain_ChooseLeft_dens, y=g_y, X=g_X, method="BFGS", control = list(fnscale=-gain_se <- sqrt(abs(diag(solve(gain_fit$hessian))))))
+
+# 1b) gain fit std condition
+gain_std <- gain[which(gain$condition == 'standard')]
+g_std_y <- gain_std$riskyChoice
+g_std_X <- transform(gain_std, 1)
+gain_std_fit <- optim(c(1,1,1,1), gain_ChooseLeft_dens, y=g_std_y, X=g_std_X, method="BFGS", control = list(gain_std_se <-sqrt(abs(diag(solve(gain_std_fit$hessian))))))
+                                                                  
+# 1c) gain fit vi condition
+gain_vi <- gain[which(gain$condition == 'value ignorance')]
+g_vi_y <- gain_vi$riskyChoice
+g_vi_X <- transform(gain_vi, 1)
+gain_vi_fit <- optim(c(1,1,1,1), gain_ChooseLeft_dens, y=g_vi_y, X=g_vi_X, method="BFGS", control = list(gain_vi_se <-sqrt(abs(diag(solve(gain_vi_fit$hessian))))))
+
+# 2) summary results
+gain_summary <- t(rbind(gain_fit$par, gain_se, gain_std_fit$par, gain_std_se, gain_vi_fit$par, gain_vi_se))
+colnames(gain_summary) <- c("pooled gain", "SE", "standard", "SE", "v_ignorance", "SE")
+rownames(gain_summary) <- c("alpha", "gamma", "kappa", "beta")
+```
+
+
+7.2 Loss Domain
+```{r}
+# 2a) loss fit pooling std/vi conditions
+l_y <- loss$riskyChoice
+l_X <- transform(loss, 0)
+loss_fit <- optim(c(1,1,1,1,1), loss_ChooseLeft_dens, y=l_y, X=l_X, method="BFGS", control = list(fnscale=-loss_se <- sqrt(abs(diag(solve(loss_fit$hessian))))))
+
+# 2b) loss fit std condition
+loss_std <- loss[which(loss$condition == 'standard')]
+l_std_y <- loss_std$riskyChoice
+l_std_X <- transform(loss_std, 0)
+loss_std_fit <- optim(c(1,1,1,1,1), loss_ChooseLeft_dens, y=l_std_y, X=l_std_X, method="BFGS", control = loss_std_se <- sqrt(abs(diag(solve(loss_std_fit$hessian)))))
+
+# 2c) loss fit vi condition
+loss_vi <- loss[which(loss$condition == 'value ignorance')]
+l_vi_y <- loss_vi$riskyChoice
+l_vi_X <- transform(loss_vi, 0)
+loss_vi_fit <- optim(c(1,1,1,1,1), loss_ChooseLeft_dens, y=l_vi_y, X=l_vi_X, method="BFGS", control = list(loss_vi_se <- sqrt(abs(diag(solve(loss_vi_fit$hessian))))))
+
+# 3) summary results
+loss_summary <- t(rbind(loss_fit$par, loss_se, loss_std_fit$par, loss_std_se, loss_vi_fit$par, loss_vi_se))
+colnames(loss_summary) <- c("pooled loss", "SE", "standard", "SE", "v_ignorance", "SE")
+rownames(loss_summary) <- c("alpha", "gamma", "kappa", "beta", "lambda")
+```
