@@ -1,13 +1,13 @@
 *****************************************************
-* Shoppertrack Data          						*
-* Author: Zhen Yuan  								*
-* Date: 08/12/2020									*
-* Last edit: 10/1/2020  							*
-* Purpose: Comapre 19 and 20 traffic                *
+* Shoppertrack Data          						
+* Author: Zhen Yuan  								
+* Date: 08/12/2020									
+* Last edit: 10/1/2020  							
+* Purpose: Comapre 19 and 20 traffic                
 *****************************************************
 
 *** STEP 1:
-***** Generate dataset for Chain Category
+*** Generate dataset for Chain Category
 
 clear all
 import delimited "ShopperTrak\crosswalk\chain_categories_20200529.csv", clear
@@ -24,7 +24,7 @@ save "shoppertrack\chain_cat.dta", replace
 *******************************////////////////*********************************
 
 *** STEP 2:
-***** Generate dataset for Site state_prov
+*** Generate dataset for Site state_prov
 
 import delimited "ShopperTrak\crosswalk\site_state_prov_20200529.csv", varnames(1) clear 
 keep site_id chain_id 
@@ -42,7 +42,7 @@ save "shoppertrack\store.dta", replace
 *******************************////////////////*********************************
 
 *** STEP 3:
-***** Merge with Traffic Data
+*** Merge with Traffic Data
 clear all
 import delimited "shoppertrack\sites.csv", clear
 keep site_id state_prov
