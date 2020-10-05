@@ -193,7 +193,7 @@ replace Sunday_policy = 0 if Sunday*policy != 1
 	reghdfe diff policy daily_cases daily_deaths cases_per_100000 deaths_per_100000 /*
 	*/Tuesday Wednesday Thursday Friday Saturday Sunday Tuesday_policy Wednesday_policy /*
 	*/Thursday_policy Friday_policy Saturday_policy Sunday_policy, absorb(site_id) 
-	outreg2 using "D:\wharton_ra\shoppertrack\final\graphs&tables\tables\day_of_week_all_categories.tex",/*
+	outreg2 using "tables\day_of_week_all_categories.tex",/*
 	*/append addtext(site_id FE,Yes, Category,`cat')
 	di "`cat'"    
 	foreach cat in "Candy & CardGift" "Home Furnishings" "Housewares & Kitchenwares" "Office Products"/*
@@ -205,7 +205,7 @@ replace Sunday_policy = 0 if Sunday*policy != 1
 		*/Tuesday Wednesday Thursday Friday Saturday Sunday Tuesday_policy /*
 		*/Wednesday_policy Thursday_policy Friday_policy/*
 		*/ Saturday_policy Sunday_policy if category_name == "`cat'", absorb(site_id) 
-		outreg2 using "D:\wharton_ra\shoppertrack\final\graphs&tables\tables\day_of_week_all_categories.tex",/*
+		outreg2 using "tables\day_of_week_all_categories.tex",/*
 		*/append addtext(site_id FE, Yes, Category,`cat')
 		di "`cat'"
 		}  
@@ -269,7 +269,7 @@ foreach dist in "New_England" "Mid_Atlantic" "West_North_Central" "South_Atlanti
 		*/title("Average Number of Customers Entering a Store per Operating Hour", span size(Small))/*
 		*/ytitle("Number of Enters")  xlabel(, format(%tdM)) legend(label(1 "2020 store traffic") /* 
 		*/label(2 "2019 store traffic") col(3) size(small)) 
-		graph export  "trend_`dist'_`cat'.pdf",replace
+		graph export  "graphs\trend_`dist'_`cat'.pdf",replace
 		
 	}  
 }
@@ -291,7 +291,7 @@ foreach cat in  "Candy & CardGift" "Home Furnishings" "Housewares & Kitchenwares
 	*/title("Average Number of Customers Entering a Store per Operating Hour", span size(Small)) /*
 	*/ytitle("Number of Enters")  xlabel(, format(%tdM)) legend(label(1 "2020 store traffic") /*
 	*/label(2 "2019 store traffic") col(3) size(small) ) 
-	graph export  "D:\wharton_ra\shoppertrack\reg2_tables\10_day_trend\trend_`cat'.pdf",replace
+	graph export  "graphs\trend_`cat'.pdf",replace
 		
 	}  
 
